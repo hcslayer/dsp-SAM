@@ -1,23 +1,17 @@
-''' NotebooksGetFunction 
-    This is a test function for the SAM application model. 
-    It prints the event to stdout, and then returns a 200 status code. 
+''' /notebooks/GET
+    This lambda function scans Dynamo, and returns updated notebook status
+    information. 
 '''
 
-import boto3, json, os
+import boto3, os, json, uuid, datetime
 
-REGION = os.environ['AWS_REGION']
-ENV = os.environ['APP_ENV']
+dynamo = boto3.client('dynamodb', region_name=os.environ['AWS_REGION'])
 
-def handler(event, context): 
-    print('[[EVENT]]', event)
-    print('[[ENV]]', ENV)
-
-    res = {
-      "statusCode": 200,
-      "headers": {
-        "Access-Control-Allow-Origin": "*"
-      },
-      "body": "request recieved"
-    }
-
-    return res 
+def handler(event, context):
+    db_response = dynamo.scan(
+        TableName="Notebooks"
+        )
+    items = db_response["Items"]
+    print(items)
+    
+    return {"data": {"items": items}  }
