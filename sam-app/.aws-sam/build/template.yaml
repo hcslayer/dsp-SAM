@@ -1,0 +1,173 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: "Test run of the SAM platform. At first glance, SAM may be a way to avoid\
+  \ the headaches and complexities of API gateway and Lambda integration.  TO TEST\
+  \ \n  - CORS enabled API gateway with GET and POST routes. \n  - Dummy lambdas for\
+  \ the routes \n  - S3 based storage and CI/CD pipelines \n  - Cloudwatch events\
+  \ and internal lambda functions \n"
+Parameters:
+  Env:
+    Description: The SAM application context.
+    Type: String
+    AllowedValues:
+    - TESTING
+    - DEV
+    - PROD
+    Default: TESTING
+Globals:
+  Function:
+    Runtime: python37
+    Timeout: 5
+    Tracing: PassThrough
+    Environment:
+      Variables:
+        APP_ENV:
+          Ref: Env
+Resources:
+  LambdaTestRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AWSLambdaFullAccess
+  TestCorsApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: test
+      EndpointConfiguration: REGIONAL
+      Cors:
+        AllowMethods: '''GET,POST,OPTIONS,DELETE'''
+        AllowHeaders: '''Authorization,Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
+        AllowOrigin: '''*'''
+        MaxAge: '''86400'''
+      DefinitionBody:
+        swagger: '2.0'
+        info:
+          version: 0.0.1
+          title: sam-test-api
+        basePath: /test
+        schemes:
+        - https
+        paths:
+          /notebooks:
+            get:
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              responses:
+                '200':
+                  description: 200 response
+                  schema:
+                    $ref: '#/definitions/Empty'
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: string
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions${NotebooksGetFunction.Arn}/invocations
+                passthroughBehavior: when_no_templates
+                httpMethod: POST
+                contentHandling: CONVERT_TO_TEXT
+                type: aws_proxy
+            post:
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              responses:
+                '200':
+                  description: 200 response
+                  schema:
+                    $ref: '#/definitions/Empty'
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: string
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: '200'
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${NotebooksPostFunction.Arn}/invocations
+                passthroughBehavior: when_no_templates
+                httpMethod: POST
+                contentHandling: CONVERT_TO_TEXT
+                type: aws_proxy
+            options:
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              responses:
+                '200':
+                  description: 200 response
+                  schema:
+                    $ref: '#/definitions/Empty'
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Headers:
+                      type: string
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: '200'
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Methods: '''GET,OPTIONS,POST'''
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${NotebooksGetFunction.Arn}/invocations
+                passthroughBehavior: when_no_match
+                type: mock
+        definitions:
+          Empty:
+            type: object
+            title: Empty Schema
+  NotebooksGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: NotebooksGetFunction
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ApiGet:
+          Type: Api
+          Properties:
+            Path: /notebooks
+            Method: get
+  NotebooksPostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: NotebooksPostFunction
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ApiPost:
+          Type: Api
+          Properties:
+            Path: /notebooks
+            Method: post
+Outputs:
+  ApiEndpoint:
+    Description: The Api Gateway endpoint for the test stage.
+    Value:
+      Fn::Sub: https://${TestCorsApi}.execute-api.${AWS::Region}.amazonaws.com/test

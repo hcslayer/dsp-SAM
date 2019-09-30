@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: "Test run of the SAM platform. At first glance, SAM may be a way to avoid\
+  \ the headaches and complexities of API gateway and Lambda integration.  TO TEST\
+  \ \n  - CORS enabled API gateway with GET and POST routes. \n  - Dummy lambdas for\
+  \ the routes \n  - S3 based storage and CI/CD pipelines \n  - Cloudwatch events\
+  \ and internal lambda functions \n"
+Parameters:
+  Env:
+    Description: The SAM application context.
+    Type: String
+    AllowedValues:
+    - TESTING
+    - DEV
+    - PROD
+    Default: TESTING
+Globals:
+  Function:
+    Runtime: python37
+    Timeout: 5
+    Tracing: PassThrough
+    Environment:
+      Variables:
+        APP_ENV:
+          Ref: Env
+Resources:
+  LambdaTestRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AWSLambdaFullAccess
+      Policies:
+      - PolicyName: apig
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action:
+            - execute-api:*
+            Effect: Allow
+            Resource: arn:aws:execute-api:*:*:*
+  NotebooksGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: s3://dsp-sam-conv/b1adc8c904052069d57b935b7dd1bb47
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ApiGet:
+          Type: Api
+          Properties:
+            Path: /notebooks
+            Method: get
+  NotebooksPostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: s3://dsp-sam-conv/d72070de1812101de35a29f1f0d1bbcb
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ApiPost:
+          Type: Api
+          Properties:
+            Path: /notebooks
+            Method: post
+  NotebooksSubIdGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: s3://dsp-sam-conv/6cb21b5b6b00ed9dec9a4e3432a41200
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ApiGetSubresource:
+          Type: Api
+          Properties:
+            Path: /notebooks/{id}
+            Method: get
