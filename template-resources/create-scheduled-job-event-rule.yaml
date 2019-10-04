@@ -1,0 +1,63 @@
+Description: Template to create a scheduled cloudwatch that'll trigger a lamdba to run an EMR job
+
+Parameters:
+  EventName: 
+    Description: A name to identify the event. 
+    Type: String 
+  Minute: 
+    Description: The minute in UTC time 
+    Type: String 
+    Default: '?'
+  Hour: 
+    Description: The hour in UTC time 
+    Type: String 
+    Default: '?'
+  Day: 
+    Description: The day in UTC time
+    Type: String 
+    Default: '?'
+  Month: 
+    Description: The month in UTC time 
+    Type: String 
+    Default: '?'
+  DayOfWeek: 
+    Description: The day of the week in UTC time 
+    Type: String 
+    Default: '?'
+  Year: 
+    Description: The year in UTC time 
+    Type: String 
+    Default: '?'
+  Payload: 
+    Description: The JSON event to pass to lambda 
+    Type: String 
+  # DeleteOnCompletion: 
+  #   Description: Should the event be deleted after the first execution? 
+  #   Type: String
+  #   AllowedValues: [ 'yes', 'no' ]
+  #   Default: 'yes'
+
+# Conditions: 
+#   DeleteEvent: 
+#     !Equals [ !Ref DeleteOnCompletion, 'yes' ]
+
+Resources: 
+  ScheduledEvent:
+    Type: AWS::Events::Rule 
+    Properties: 
+      Description: A scheduled event for EMR-based jobs.
+      Name: !Ref EventName
+      State: ENABLED 
+      ScheduleExpression: !Join [ '', [cron(, !Ref Minute, ' ', !Ref Hour, ' ', !Ref Day, ' ', !Ref Month, ' ', !Ref DayOfWeek, ' ', !Ref Year, ) ]]  
+      Targets: 
+        - Arn: arn:aws:lambda:us-east-1:592871069658:function:emr-job-runner
+          Id: emr-job-runner
+          Input: !Ref Payload 
+
+  ScheduledEventPermission: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: emr-job-runner
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ScheduledEvent.Arn  

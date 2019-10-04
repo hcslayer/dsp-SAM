@@ -1,0 +1,201 @@
+Description: Configures a VPC with a private and public subnet, a NAT gateway, and standard routes. 
+
+Parameters: # for a simple setup, use defaults 
+  VPCName: 
+    Description: The name of the VPC being created. 
+    Type: String
+    Default: DataVPC
+  VpcCIDR: 
+    Description: CIDR block for the VPC. 
+    Type: String
+    Default: 10.192.10.0/16
+  PublicSubnetCIDR: 
+    Description: The IP range for the public subnet. 
+    Type: String
+    Default: 10.192.10.0/24
+  PrivateSubnetCIDR: 
+    Description: The IP range for the private subnet. 
+    Type: String 
+    Default: 10.192.20.0/24
+
+Resources: 
+  # VPC 
+  DataVPC: 
+    Type: AWS::EC2::VPC
+    Properties: 
+      EnableDnsSupport: true
+      EnableDnsHostnames: true 
+      CidrBlock: !Ref VpcCIDR
+      Tags: 
+        - 
+          Key: 'Name'
+          Value: !Ref VPCName
+        - 
+          Key: 'Checkpoint'
+          Value: 'Setup'
+  
+  # Subnets 
+  PublicSubnet: 
+    Type: AWS::EC2::Subnet
+    Properties: 
+      CidrBlock: !Ref PublicSubnetCIDR
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref DataVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags: 
+        - 
+          Key: 'Network'
+          Value: 'Public'
+        - 
+          Key: 'Checkpoint'
+          Value: 'Setup'
+  
+  PrivateSubnet: 
+    Type: AWS::EC2::Subnet
+    Properties: 
+      CidrBlock: !Ref PrivateSubnetCIDR
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref DataVPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags: 
+        - 
+          Key: 'Network'
+          Value: 'Private'
+        - 
+          Key: 'Checkpoint'
+          Value: 'Setup'
+
+  # Internet Gateway and NAT  
+  InternetGateway: 
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags: 
+        - 
+          Key: 'Name'
+          Value: 'SetupGateway'    
+        - 
+          Key: 'Checkpoint'
+          Value: 'Setup'
+  
+  InternetGatewayPlugin: 
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref DataVPC
+  
+  NATGatewayEIP: 
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayPlugin
+    Properties: 
+      Domain: vpc
+  
+  NATGateway: 
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet
+  
+  # Routes 
+  PublicRouteTable: 
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref DataVPC
+  
+  StdPublicRoute: 
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayPlugin
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  
+  PublicRouteAssociation: 
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+  
+  PrivateRouteTable: 
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref DataVPC
+  
+  StdPrivateRoute: 
+    Type: AWS::EC2::Route
+    Properties: 
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+  
+  PrivateRouteAssociation: 
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet
+  
+  # Security groups 
+  SageMakerGroup: # identifier group to link SageMaker notebooks to EMR 
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Identifier group to associate cluster and notebook traffic. 
+      GroupName: 'SageMakerClusterInterface'
+      VpcId: !Ref DataVPC
+  
+  ClusterGroup: # the other half of the SageMaker-EMR security group link 
+    Type: AWS::EC2::SecurityGroup 
+    Properties: 
+      GroupDescription: Opens Spark and Livy port access for cluster.
+      GroupName: 'ClusterPortOpener'
+      VpcId: !Ref DataVPC 
+      SecurityGroupIngress: 
+      - IpProtocol: tcp
+        FromPort: 8998
+        ToPort: 8998
+        SourceSecurityGroupId: !Ref SageMakerGroup
+      SecurityGroupEgress: 
+      - IpProtocol: tcp
+        FromPort: 8998
+        ToPort: 8998
+        DestinationSecurityGroupId: !Ref SageMakerGroup
+  
+  # SSM Parameters
+  VpcId: 
+    Type: AWS::SSM::Parameter
+    Properties: 
+      Description: The id of the primary VPC for the data environment.
+      Name: '/setup/VPC'
+      Value: !Ref DataVPC
+      Type: String 
+       
+  PublicSubnetId: 
+    Type: AWS::SSM::Parameter 
+    Properties: 
+      Description: The id of the public subnet as created by setup.yaml 
+      Name: '/setup/PublicSubnetId'
+      Value: !Ref PublicSubnet
+      Type: String 
+
+  PrivateSubnetId: 
+    Type: AWS::SSM::Parameter
+    Properties: 
+      Description: The id of the private subnet as created by setup.yaml
+      Name: '/setup/PrivateSubnetId'
+      Value: !Ref PrivateSubnet
+      Type: String  
+
+  NotebookSecurityGroup: 
+    Type: AWS::SSM::Parameter
+    Properties: 
+      Description: The security group id for SageMaker notebooks deployed in the data environment. 
+      Name: '/setup/NotebookSecurityGroup'  
+      Value: !Ref SageMakerGroup
+      Type: String 
+
+  ClusterSecurityGroup: 
+    Type: AWS::SSM::Parameter
+    Properties: 
+      Description: The port-opener security group for EMR clusters operating under SageMaker notebooks. 
+      Name: '/setup/ClusterSecurityGroup'
+      Value: !Ref ClusterGroup
+      Type: String
+  

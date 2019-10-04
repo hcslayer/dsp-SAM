@@ -1,0 +1,74 @@
+Description: Lambda-triggered template to build an EMR cluster. 
+
+Parameters: 
+  # for future: add private/public customization
+  # add allowed values for instance types 
+  ClusterName: 
+    Description: The name of the cluster. Determines SSM parameter names. 
+    Type: String 
+  MasterInstanceType: 
+    Description: The instance type for the master node. 
+    Type: String 
+    Default: m5.xlarge
+  CoreInstanceType: 
+    Description: The instance type for core nodes. 
+    Type: String  
+    Default: m5.xlarge
+  MasterInstanceCount: 
+    Description: The number of instances to provision for the master node. 
+    Type: Number 
+    Default: 1 
+  CoreInstanceCount: 
+    Description: The number of instances to provision for the core nodes. 
+    Type: Number 
+    Default: 2 
+  PricingModel: 
+    Description: The pricing model for the cluster instances. 
+    Type: String
+    AllowedValues: 
+      - ON_DEMAND
+      - SPOT
+    Default: ON_DEMAND
+
+Resources: 
+  Cluster: 
+    Type: AWS::EMR::Cluster 
+    Properties: 
+      Name: !Ref ClusterName
+      Applications: 
+        - Name: 'Hive'
+        - Name: 'Hadoop'
+        - Name: 'Livy'
+        - Name: 'Pig'
+        - Name: 'Spark'
+      Instances: 
+        AdditionalMasterSecurityGroups: 
+          - !Sub '{{resolve:ssm:/setup/ClusterSecurityGroup:1}}'
+        MasterInstanceGroup: 
+          InstanceCount: !Ref MasterInstanceCount
+          InstanceType: !Ref MasterInstanceType
+          Market: !Ref PricingModel
+          Name: !Join [ '', [ !Ref ClusterName, -MasterInstance ] ]
+        CoreInstanceGroup: 
+          InstanceCount: !Ref CoreInstanceCount
+          InstanceType: !Ref CoreInstanceType
+          Market: !Ref PricingModel
+          Name: !Join [ '', [ !Ref ClusterName, -CoreInstance ] ]
+        Ec2SubnetId: !Sub '{{resolve:ssm:/setup/PublicSubnetId:1}}'
+        KeepJobFlowAliveWhenNoSteps: true
+      JobFlowRole: !Sub '{{resolve:ssm:/setup/roles/ClusterJobFlowRole:1}}'
+      ServiceRole: !Sub '{{resolve:ssm:/setup/roles/ClusterServiceRole:1}}'
+      ReleaseLabel: emr-5.27.0 # parameterize this one too?
+      Tags: 
+        - Key: Protocol
+          Value: Sparkmaker 
+      VisibleToAllUsers: true 
+  
+  ClusterId: 
+    Type: AWS::SSM::Parameter
+    Properties: 
+      Description: The unique cluster id. 
+      Name: !Join ['', [ '/clusters/', !Ref ClusterName ] ] 
+      Value: !Ref Cluster 
+      Type: String 
+     
