@@ -2,7 +2,7 @@
     A python script to configure the foundations of the DSP-SAM 
     environment. 
 '''
-import pyfiglet, boto3, sys, os, subprocess, shlex
+import pyfiglet, boto3, sys, os, subprocess, shlex, time
 
 # utilities 
 
@@ -66,7 +66,7 @@ def main():
   cft = boto3.client('cloudformation', region_name=region)
 
 
-  
+  print('Complete! Provisioning storage....')
   # create s3 bucket 
   try: 
     bucket_response = s3.create_bucket(
@@ -100,6 +100,8 @@ def main():
   except Exception as e: 
     print('[[ERROR]]: S3 Failure on bucket creation.')
     print(e)
+    return 
+
 
   # upload the target resources
   cft_bucket = 's3://{}-core-src'.format(prefix)
@@ -108,6 +110,7 @@ def main():
     upload_output = subprocess.call(shlex.split('./upload_resources.sh {} {}'.format(cft_bucket, emr_bucket)))
   except Exception as e: 
     print('[[ERROR]]', e)
+    return 
   
   # on success, write parameters to SSM and run the networking template 
   try: 
@@ -115,30 +118,59 @@ def main():
       Name='/setup/BucketPrefix',
       Description='Global bucket and stack identifier prefix.',
       Value=prefix,
-      Type='String'
+      Type='String',
+      Overwrite=True
     )
   except Exception as e: 
     print('[[ERROR]]', e)
+    return
   
   # build network stack 
   print('BUILDING NETWORK STACK ==> ')
+  print('This may take several moments.....')
+  bucket_url = 'http://s3-{}.amazonaws.com/{}-core-src'.format(region, prefix)
+  #emr_bucket = 'http://s3-{}.amazonaws.com/{}-emr-resources'.format(region, prefix)
   try: 
     cft.create_stack(
-      StackName='{}-network'.format(prefix)
-      TemplateUrl='{}/setup-network.yaml'.format(cft_bucket)
+      StackName='{}-network'.format(prefix),
+      TemplateURL='{}/setup-network.yaml'.format(bucket_url),
       Parameters=[
         {
         'ParameterKey': 'VPCName',
         'ParameterValue': '{}-VPC'.format(prefix)
         }
       ],
-      OnFailure='DELETE'
+      OnFailure='DELETE',
+      EnableTerminationProtection=False
     )
+    # this would be the place to include some type of graphic 
+    # or an updating status
+    STACK_STATUS = 'CREATE_IN_PROGRESS'
+    print('STATUS: ')
+    time_elapsed = 0 
+    while (STACK_STATUS != 'CREATE_COMPLETE'):
+      res = cft.describe_stacks(
+        StackName='{}-network'.format(prefix)
+      )
+      STACK_STATUS = res['Stacks'][0]['StackStatus']
+      events = cft.describe_stack_events(
+        StackName='{}-network'.format(prefix)
+      )['StackEvents']
 
-
+      for event in events: 
+        print('[[LATEST]] ', event['LogicalResourceId'], ' ==> ', event['ResourceStatus'], end='\r')
+        time.sleep(1)
+      
+      print('> > > ', STACK_STATUS, ' time elapsed {}s'.format(time_elapsed), end='\r')
+      time.sleep(5)
  
-
-
+         
+  except Exception as e: 
+    print('[[ERROR]]', e)
+    return 
+  print() 
+  print('SETUP COMPLETE')
+  
 
 
 
