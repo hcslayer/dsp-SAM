@@ -132,6 +132,21 @@ Resources:
           Properties: 
             Path: /jobs
             Method: get
+  
+  JobsGetIdFunction: 
+    Type: AWS::Serverless::Function
+    Properties: 
+      Role: !GetAtt LambdaTestRole.Arn
+      CodeUri: routes/jobs-id-get
+      Handler: main.handler
+      Runtime: python3.7
+      Events: 
+        ApiGetJobId: 
+          Type: Api 
+          Properties: 
+            Path: /jobs/{id}
+            Method: get 
+             
 
   SageMakerNotebookLinkInternal: 
     Type: AWS::Serverless::Function

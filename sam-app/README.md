@@ -6,6 +6,8 @@ So, this repo recognizes an attempt to convert the "pure" CloudFormation archite
 
 ## Workflow 
 
+*Note: this workflow assumes that you have a designated S3 bucket to do all of the SAM-app things.* 
+
 While developing in the SAM environment, there's some neat tricks that support a continuous dev process without needing to enter the console. 
 In broad strokes, the workflow consists of **Build, Package, Deploy**. 
 
@@ -19,11 +21,22 @@ To package the application, do
 
 **Deployment** builds the stack, and provisions the resources specified by the packaged template file. To deploy, do 
 
-`sam deploy --template-file ./output_file_name.yaml --stack-name unique-stack-name --capabilities CAPABILITY_IAM`
+`sam deploy --template-file ./output_file_name.yaml --stack-name unique-stack-name --capabilities CAPABILITY_NAMED_IAM`
 
-That last bit about `capabilities` is vital. Otherwise, SAM cannot provision the implicit IAM roles that knit Lambdas together, and that stack'll be rolling over before you know it. 
+That last bit about `capabilities` is vital. Otherwise, SAM cannot provision the implicit IAM roles that knit Lambdas together, and that stack'll be rolling over before you know it. Also, the cababilities business seems to be a bit wonky. The error messages are typically helpful, and it'll be clear what you need to change or append to the request. 
 
-When you deploy the SAM app, the CLI will hang until it gets an affirmative response from CloudFormation. *This only indicates that the stack has started building*. It can still fail, and it's a good idea to keep an eye on the status. 
+When you deploy the SAM app, the CLI will hang until it gets an affirmative response from CloudFormation. *This means that you will know if and when the stack has built sucessfully*. 
+
+## Odds and Ends 
+
+If you encounter this 
+
+```bash 
+Unable to upload artifact routes/notebooks-get/ referenced by CodeUri parameter of NotebooksGetFunction resource.
+An error occurred (ExpiredToken) when calling the PutObject operation: The provided token has expired.
+Exception: Command '['aws', 'cloudformation', 'package', '--output-template-file', 'deploy-template.yaml', '--region', 'us-east-2', '--s3-bucket', 'dsp-sam-conv', '--template-file', '/Users/hs/work/dsp-SAM/sam-app/template.yaml']' returned non-zero exit status 255.
+```
+just renew your CLI credentials. From the SSO, click "programmatic or command line access" and re-export your AWS credentials. There are likely other solutions for this issue, but this is what I did, and it worked. 
 
 
 
