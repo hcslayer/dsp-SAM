@@ -28,8 +28,9 @@ Globals:
       Variables: 
         APP_ENV: !Ref Env  
     
-Resources: 
-  LambdaTestRole: # extremely liberal access -- DO NOT CARRY TO DEV 
+Resources:
+  # LAMBDA CONFIG  
+  LambdaTestRole: # extremely liberal access -- DO NOT CARRY BEYOND DEV 
     Type: AWS::IAM::Role
     Properties: 
       AssumeRolePolicyDocument: 
@@ -41,7 +42,17 @@ Resources:
             Service: lambda.amazonaws.com
       Path: /
       ManagedPolicyArns: 
-      - arn:aws:iam::aws:policy/AWSLambdaFullAccess
+      - 'arn:aws:iam::aws:policy/AWSLambdaFullAccess'
+      - 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+      - 'arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess'
+      - 'arn:aws:iam::aws:policy/AmazonElasticMapReduceFullAccess'
+      - 'arn:aws:iam::aws:policy/AmazonSSMFullAccess'
+      - 'arn:aws:iam::aws:policy/AWSGlueConsoleFullAccess'
+      - 'arn:aws:iam::aws:policy/AmazonSageMakerFullAccess'
+      - 'arn:aws:iam::aws:policy/AWSCloudFormationFullAccess'
+      - 'arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess'
+      - 'arn:aws:iam::aws:policy/CloudWatchFullAccess'
+      - 'arn:aws:iam::aws:policy/CloudWatchEventsFullAccess'
       Policies: 
       - PolicyName: apig
         PolicyDocument: 
@@ -93,6 +104,160 @@ Resources:
           Properties: 
             Path: /notebooks/{id}
             Method: get
+  
+  JobsPostFunction: 
+    Type: AWS::Serverless::Function
+    Properties: 
+      Role: !GetAtt LambdaTestRole.Arn
+      CodeUri: routes/jobs-post
+      Handler: main.handler
+      Runtime: python3.7 
+      Events: 
+        ApiPostJob: 
+          Type: Api
+          Properties: 
+            Path: /jobs
+            Method: post
+            
+  JobsGetFunction: 
+    Type: AWS::Serverless::Function
+    Properties: 
+      Role: !GetAtt LambdaTestRole.Arn
+      CodeUri: routes/jobs-get
+      Handler: main.handler
+      Runtime: python3.7
+      Events: 
+        ApiGetJob: 
+          Type: Api 
+          Properties: 
+            Path: /jobs
+            Method: get
+  
+  JobsGetIdFunction: 
+    Type: AWS::Serverless::Function
+    Properties: 
+      Role: !GetAtt LambdaTestRole.Arn
+      CodeUri: routes/jobs-id-get
+      Handler: main.handler
+      Runtime: python3.7
+      Events: 
+        ApiGetJobId: 
+          Type: Api 
+          Properties: 
+            Path: /jobs/{id}
+            Method: get 
+             
+
+  SageMakerNotebookLinkInternal: 
+    Type: AWS::Serverless::Function
+    Properties: 
+      Role: !GetAtt LambdaTestRole.Arn
+      CodeUri: internal/cluster-backed-nb/
+      Handler: main.handler
+      Runtime: python3.7
+      Events: 
+        ClusterEvent: 
+          Type: CloudWatchEvent 
+          Properties: 
+            Pattern: {"source": [ "aws.emr" ], "detail-type": [ "EMR Cluster State Change" ], "detail": { "state": [ "STARTING" ] } }
+
+  # INTERNAL IAM ROLES 
+  SageMakerRole: 
+    Type: AWS::IAM::Role
+    Properties: 
+      Description: Primary execution role for SageMaker notebooks. Consumes managed policies. 
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - 
+            Effect: 'Allow'
+            Principal:
+              Service:
+                - sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      # Policies: > > For fine-tuning inline IAM policies 
+      RoleName: SageMaker
+  
+  EMRServiceRole: 
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Service role for EMR clusters. 
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow 
+          Principal: 
+            Service: elasticmapreduce.amazonaws.com
+          Action: 'sts:AssumeRole'
+      Path: / 
+      ManagedPolicyArns: 
+      - 'arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceRole'
+      RoleName: EmrService
+
+  # the instance role and instance profile are required for configuring EMR permissions 
+  # the instance profile is effectively the 'jobFlowRole', for cluster nodes 
+  # the service role applies to EMR more generally  
+  EMRInstanceRole: 
+    Type: AWS::IAM::Role
+    Properties: 
+      Description: Instance role for EMR clusters. Characterizes instance profile.
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+      - 'arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceforEC2Role'
+      RoleName: EmrJobFlow
+
+  EMRInstanceProfile: 
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      Path: / 
+      Roles: 
+      - !Ref EMRInstanceRole
+  
+  # SSM PARAMETERS
+  SagemakerMasterRole:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The ARN of the master SageMaker role. 
+      Name: '/setup/roles/SageMakerRole' 
+      Value: !GetAtt SageMakerRole.Arn
+      Type: String 
+
+  ClusterJobFlowRole: 
+    Type: AWS::SSM::Parameter
+    Properties: 
+      Description: The id of the JobFlowRole for any EMR cluster. 
+      Name: '/setup/roles/ClusterJobFlowRole'
+      Value: !Ref EMRInstanceProfile
+      Type: String 
+
+  ClusterServiceRole: 
+    Type: AWS::SSM::Parameter
+    Properties: 
+      Description: The id of the ServiceRole for any EMR cluster. 
+      Name: '/setup/roles/ClusterServiceRole'
+      Value: !Ref EMRServiceRole
+      Type: String
+
+  DataLambdaRole:
+    Type: AWS::SSM::Parameter 
+    Properties: 
+      Description: The master execution role for data lambdas 
+      Name: '/setup/roles/DataLambdasRole'
+      Value: !GetAtt LambdaTestRole.Arn
+      Type: String
+
 
 
   

@@ -37,6 +37,16 @@ Resources:
       Path: /
       ManagedPolicyArns:
       - arn:aws:iam::aws:policy/AWSLambdaFullAccess
+      - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+      - arn:aws:iam::aws:policy/AmazonElasticMapReduceFullAccess
+      - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+      - arn:aws:iam::aws:policy/AWSGlueConsoleFullAccess
+      - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+      - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+      - arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess
+      - arn:aws:iam::aws:policy/CloudWatchFullAccess
+      - arn:aws:iam::aws:policy/CloudWatchEventsFullAccess
       Policies:
       - PolicyName: apig
         PolicyDocument:
@@ -53,7 +63,7 @@ Resources:
         Fn::GetAtt:
         - LambdaTestRole
         - Arn
-      CodeUri: s3://dsp-sam-conv/b1adc8c904052069d57b935b7dd1bb47
+      CodeUri: s3://dsp-sam-conv/e2012a7d88a3a8f3dca82b197890945b
       Handler: main.handler
       Runtime: python3.7
       Events:
@@ -69,7 +79,7 @@ Resources:
         Fn::GetAtt:
         - LambdaTestRole
         - Arn
-      CodeUri: s3://dsp-sam-conv/d72070de1812101de35a29f1f0d1bbcb
+      CodeUri: s3://dsp-sam-conv/879f416b547c29e1516ae75b53f109f1
       Handler: main.handler
       Runtime: python3.7
       Events:
@@ -85,7 +95,7 @@ Resources:
         Fn::GetAtt:
         - LambdaTestRole
         - Arn
-      CodeUri: s3://dsp-sam-conv/6cb21b5b6b00ed9dec9a4e3432a41200
+      CodeUri: s3://dsp-sam-conv/9cf5b75106b32660e00ba5a2d5223ae1
       Handler: main.handler
       Runtime: python3.7
       Events:
@@ -94,3 +104,57 @@ Resources:
           Properties:
             Path: /notebooks/{id}
             Method: get
+  JobsPostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: s3://dsp-sam-conv/9463fbb8bf41422a4b3ba11ed45dec1a
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ApiPostJob:
+          Type: Api
+          Properties:
+            Path: /jobs
+            Method: post
+  JobsGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: s3://dsp-sam-conv/d95b76ea01fb2d24023c2e5afa0aa7d5
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ApiGetJob:
+          Type: Api
+          Properties:
+            Path: /jobs
+            Method: get
+  SageMakerNotebookLinkInternal:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: s3://dsp-sam-conv/7c93f24ea465db22756a3c29309348c0
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ClusterEvent:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+              - aws.emr
+              detail-type:
+              - EMR Cluster State Change
+              detail:
+                state:
+                - STARTING
