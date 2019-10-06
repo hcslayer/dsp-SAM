@@ -157,6 +157,11 @@ def main():
         StackName='{}-network'.format(prefix)
       )['StackEvents']
 
+      ''' NOTE: re-do this section. Set up a progress bar based on the number of resources 
+                that the template will ultimately provision, plotted against the number 
+                of create_completes that the stack status returns. Perhaps LATEST could be a 
+                section below here, or cast off altogether. 
+      '''
       for event in events: 
         print('[[LATEST]] ', event['LogicalResourceId'], ' ==> ', event['ResourceStatus'], end='\r')
         time.sleep(1)
@@ -172,6 +177,13 @@ def main():
   print('SETUP COMPLETE')
   
 
+''' Henry's internal NOTE s 
+    Okay, so this does what it needs to do, but it's far from elegant. 
+    Continue to polish before letting feature creep create more sloppy 
+    messes. 
+
+    Also, look into interactive shells 
+''' 
 
 
 if __name__ == '__main__': 

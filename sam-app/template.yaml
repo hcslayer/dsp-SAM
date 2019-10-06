@@ -160,7 +160,33 @@ Resources:
           Type: CloudWatchEvent 
           Properties: 
             Pattern: {"source": [ "aws.emr" ], "detail-type": [ "EMR Cluster State Change" ], "detail": { "state": [ "STARTING" ] } }
-
+  
+  EmrJobMonitorInternal: 
+    Type: AWS::Serverless::Function
+    Properties: 
+      Role: !GetAtt LambdaTestRole.Arn
+      CodeUri: internal/monitor-emr-job
+      Handler: main.handler
+      Runtime: python3.7
+      Events: 
+        EmrStateEvent: 
+          Type: CloudWatchEvent
+          Properties: 
+            Pattern: {"source": [ "aws.emr" ], "detail-type": [ "EMR Step Status Change", "EMR Cluster State Change" ] }
+  
+  SmNotebookMonitorInternal: 
+    Type: AWS::Serverless::Function
+    Properties: 
+      Role: !GetAtt LambdaTestRole.Arn
+      CodeUri: internal/monitor-sm-nb
+      Handler: main.handler
+      Runtime: python3.7
+      Events: 
+        NbStateChange: 
+          Type: CloudWatchEvent
+          Properties: 
+            Pattern: { "source": [ "aws.sagemaker" ], "detail-type": [ "SageMaker Notebook Instance State Change" ] }
+  
   # INTERNAL IAM ROLES 
   SageMakerRole: 
     Type: AWS::IAM::Role

@@ -1,3 +1,5 @@
 sam-env
 .vscode
 scratchpad
+.aws*
+sam-app/.aws*

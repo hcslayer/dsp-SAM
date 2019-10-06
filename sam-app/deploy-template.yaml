@@ -174,6 +174,45 @@ Resources:
               detail:
                 state:
                 - STARTING
+  EmrJobMonitorInternal:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: s3://dsp-sam-conv/641fa1e520837a6e3e2ab35ebeecb41f
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        EmrStateEvent:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+              - aws.emr
+              detail-type:
+              - EMR Step Status Change
+              - EMR Cluster State Change
+  SmNotebookMonitorInternal:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: s3://dsp-sam-conv/5659de0f23a9d1742cde1082d3ecc12f
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        NbStateChange:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+              - aws.sagemaker
+              detail-type:
+              - SageMaker Notebook Instance State Change
   SageMakerRole:
     Type: AWS::IAM::Role
     Properties:
