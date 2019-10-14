@@ -1,0 +1,102 @@
+# template to provision a SageMaker notebook 
+
+Description: Parameterized template to provision a custom SageMaker notebook. 
+
+Parameters:
+  Name: 
+    Description: The name of the notebook. 
+    Type: String
+  # adding repositories is something that still needs to be ironed out and figured out.  
+  MainRepository: 
+    Description: The name of the primary GitHub repository associated with the notebook. Leave blank for none.
+    Type: String 
+    Default: '' 
+  Public: 
+    Description: Do you want the notebook to be directly connected to the internet? 
+    Type: String
+    AllowedValues: ['yes', 'no']
+    Default: 'yes'
+  HasRootAccess: 
+    Description: Enable or disable root access for users of the notebook. Enabled is recommended for custom lifecycles. 
+    Type: String 
+    AllowedValues: ['Enabled', 'Disabled']
+    Default: Enabled 
+  NotebookInstanceType: 
+    Description: The instance type to be provisioned. 
+    Type: String
+    Default: ml.t2.medium
+    AllowedPattern: ^ml.([a-z0-9]){2}.([a-z])+
+  VolumeSize: 
+    Description: The volume size in GB. 
+    Type: Number
+    Default: 5
+  Accelerator: 
+    Description: The Elastic Inference accelerator to attach to the notebook.
+    Type: String
+    Default: None
+    AllowedValues: ['None', 'ml.eia1.medium', 'ml.eia1.large', 'ml.eia1.xlarge']
+  CustomLifecycleConfig: 
+    Description: The name of a custom lifecycle configuration to attach to the notebook. 
+    Type: String
+    Default: None
+  Subnet: 
+    Description: The subnet to launch the notebook in. 
+    Type: String
+    AllowedValues: ['Setup Default - Private', 'Setup Default - Public']
+    Default: 'Setup Default - Private' 
+  SecurityGroup: 
+    Description: The security group to attach to the instance. Leave as default for boilerplate config. 
+    Type: String 
+    Default: ''
+  StreetSweeperTarget: 
+    Description: Set to 'yes' to enable this resource to be deleted with StreetSweeper. 
+    Type: String
+    AllowedValues: ['yes', 'no']
+    Default: 'no'
+  UUID: 
+    Description: The unique identifier generated for this notebook, to be sent to DynamoDB
+    Type: String 
+    Default: ''
+
+# street sweeper is a lambda function to clean up cft-generated resources, and maintain the data environment
+# this will be implemented soon. 
+Conditions: 
+  RepoSpecified: 
+    !Not [ !Equals [ !Ref MainRepository, '' ] ]
+  IsPublic: 
+    !Equals [ !Ref Public, 'yes' ]
+  HasAccelerator: 
+    !Not [ !Equals [ !Ref Accelerator, 'None' ] ]
+  HasCustomLCC: 
+    !Not [ !Equals [ !Ref CustomLifecycleConfig, 'None' ] ]
+  CustomSecurityGroup: 
+    !Not [ !Equals [ !Ref SecurityGroup, '' ] ]
+  Cleanup: 
+    !Equals [ !Ref StreetSweeperTarget, 'yes' ]
+
+# add conditional execution bits here: repos, acclerator, streetsweeper target... 
+  
+
+Resources: 
+  Notebook: 
+    Type: AWS::SageMaker::NotebookInstance
+    Properties: 
+      # AcceleratorTypes: 
+        # !If [ HasAccelerator, !Ref Accelerator, !Ref AWS::NoValue ]
+      # AdditionalCodeRepositories: 
+      DefaultCodeRepository: !If [ RepoSpecified, !Ref MainRepository, !Ref 'AWS::NoValue' ]
+      DirectInternetAccess: !If [ IsPublic, Enabled, Disablednpp ]
+      InstanceType: !Ref NotebookInstanceType
+      # KmsKeyId: 
+      LifecycleConfigName: !If [ HasCustomLCC, !Ref CustomLifecycleConfig, !Ref 'AWS::NoValue' ]
+      NotebookInstanceName: !Ref Name
+      RoleArn: !Sub '{{resolve:ssm:/setup/roles/NotebookRole:1}}'
+      RootAccess: !Ref HasRootAccess
+      SecurityGroupIds: !If [ CustomSecurityGroup, !Ref SecurityGroup, [!Sub '{{resolve:ssm:/setup/NotebookSecurityGroup:1}}'] ]
+      SubnetId: !If [ IsPublic, !Sub '{{resolve:ssm:/setup/PublicSubnetId:1}}', !Sub '{{resolve:ssm:/setup/PrivateSubnetId:1}}' ]
+      Tags: !If [ Cleanup, [ { "Key": "Protocol", "Value": "StreetSweeper" } ], !Ref 'AWS::NoValue' ]
+      VolumeSizeInGB: !Ref VolumeSize
+      Tags: 
+        - 
+          Key: UUID
+          Value: !Ref UUID 

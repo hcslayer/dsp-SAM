@@ -37,114 +37,32 @@ Resources:
       Path: /
       ManagedPolicyArns:
       - arn:aws:iam::aws:policy/AWSLambdaFullAccess
-  TestCorsApi:
-    Type: AWS::Serverless::Api
-    Properties:
-      StageName: test
-      EndpointConfiguration: REGIONAL
-      Cors:
-        AllowMethods: '''GET,POST,OPTIONS,DELETE'''
-        AllowHeaders: '''Authorization,Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
-        AllowOrigin: '''*'''
-        MaxAge: '''86400'''
-      DefinitionBody:
-        swagger: '2.0'
-        info:
-          version: 0.0.1
-          title: sam-test-api
-        basePath: /test
-        schemes:
-        - https
-        paths:
-          /notebooks:
-            get:
-              consumes:
-              - application/json
-              produces:
-              - application/json
-              responses:
-                '200':
-                  description: 200 response
-                  schema:
-                    $ref: '#/definitions/Empty'
-                  headers:
-                    Access-Control-Allow-Origin:
-                      type: string
-              x-amazon-apigateway-integration:
-                responses:
-                  default:
-                    statusCode: 200
-                    responseParameters:
-                      method.response.header.Access-Control-Allow-Origin: '''*'''
-                uri:
-                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions${NotebooksGetFunction.Arn}/invocations
-                passthroughBehavior: when_no_templates
-                httpMethod: POST
-                contentHandling: CONVERT_TO_TEXT
-                type: aws_proxy
-            post:
-              consumes:
-              - application/json
-              produces:
-              - application/json
-              responses:
-                '200':
-                  description: 200 response
-                  schema:
-                    $ref: '#/definitions/Empty'
-                  headers:
-                    Access-Control-Allow-Origin:
-                      type: string
-              x-amazon-apigateway-integration:
-                responses:
-                  default:
-                    statusCode: '200'
-                    responseParameters:
-                      method.response.header.Access-Control-Allow-Origin: '''*'''
-                uri:
-                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${NotebooksPostFunction.Arn}/invocations
-                passthroughBehavior: when_no_templates
-                httpMethod: POST
-                contentHandling: CONVERT_TO_TEXT
-                type: aws_proxy
-            options:
-              consumes:
-              - application/json
-              produces:
-              - application/json
-              responses:
-                '200':
-                  description: 200 response
-                  schema:
-                    $ref: '#/definitions/Empty'
-                  headers:
-                    Access-Control-Allow-Origin:
-                      type: string
-                    Access-Control-Allow-Methods:
-                      type: string
-                    Access-Control-Allow-Headers:
-                      type: string
-              x-amazon-apigateway-integration:
-                responses:
-                  default:
-                    statusCode: '200'
-                    responseParameters:
-                      method.response.header.Access-Control-Allow-Methods: '''GET,OPTIONS,POST'''
-                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
-                      method.response.header.Access-Control-Allow-Origin: '''*'''
-                requestTemplates:
-                  application/json: '{"statusCode": 200}'
-                uri:
-                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${NotebooksGetFunction.Arn}/invocations
-                passthroughBehavior: when_no_match
-                type: mock
-        definitions:
-          Empty:
-            type: object
-            title: Empty Schema
+      - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+      - arn:aws:iam::aws:policy/AmazonElasticMapReduceFullAccess
+      - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+      - arn:aws:iam::aws:policy/AWSGlueConsoleFullAccess
+      - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+      - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+      - arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess
+      - arn:aws:iam::aws:policy/CloudWatchFullAccess
+      - arn:aws:iam::aws:policy/CloudWatchEventsFullAccess
+      Policies:
+      - PolicyName: apig
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action:
+            - execute-api:*
+            Effect: Allow
+            Resource: arn:aws:execute-api:*:*:*
   NotebooksGetFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
       CodeUri: NotebooksGetFunction
       Handler: main.handler
       Runtime: python3.7
@@ -157,6 +75,10 @@ Resources:
   NotebooksPostFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
       CodeUri: NotebooksPostFunction
       Handler: main.handler
       Runtime: python3.7
@@ -166,8 +88,180 @@ Resources:
           Properties:
             Path: /notebooks
             Method: post
-Outputs:
-  ApiEndpoint:
-    Description: The Api Gateway endpoint for the test stage.
-    Value:
-      Fn::Sub: https://${TestCorsApi}.execute-api.${AWS::Region}.amazonaws.com/test
+  NotebooksSubIdGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: NotebooksSubIdGetFunction
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ApiGetSubresource:
+          Type: Api
+          Properties:
+            Path: /notebooks/{id}
+            Method: get
+  JobsPostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: JobsPostFunction
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ApiPostJob:
+          Type: Api
+          Properties:
+            Path: /jobs
+            Method: post
+  JobsGetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: JobsGetFunction
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ApiGetJob:
+          Type: Api
+          Properties:
+            Path: /jobs
+            Method: get
+  JobsGetIdFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: JobsGetIdFunction
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ApiGetJobId:
+          Type: Api
+          Properties:
+            Path: /jobs/{id}
+            Method: get
+  SageMakerNotebookLinkInternal:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: SageMakerNotebookLinkInternal
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ClusterEvent:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+              - aws.emr
+              detail-type:
+              - EMR Cluster State Change
+              detail:
+                state:
+                - STARTING
+  SageMakerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Primary execution role for SageMaker notebooks. Consumes managed
+        policies.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - sagemaker.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+      - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      RoleName: SageMaker
+  EMRServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Service role for EMR clusters.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow
+          Principal:
+            Service: elasticmapreduce.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceRole
+      RoleName: EmrService
+  EMRInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Instance role for EMR clusters. Characterizes instance profile.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceforEC2Role
+      RoleName: EmrJobFlow
+  EMRInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+      - Ref: EMRInstanceRole
+  SagemakerMasterRole:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The ARN of the master SageMaker role.
+      Name: /setup/roles/SageMakerRole
+      Value:
+        Fn::GetAtt:
+        - SageMakerRole
+        - Arn
+      Type: String
+  ClusterJobFlowRole:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The id of the JobFlowRole for any EMR cluster.
+      Name: /setup/roles/ClusterJobFlowRole
+      Value:
+        Ref: EMRInstanceProfile
+      Type: String
+  ClusterServiceRole:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The id of the ServiceRole for any EMR cluster.
+      Name: /setup/roles/ClusterServiceRole
+      Value:
+        Ref: EMRServiceRole
+      Type: String
+  DataLambdaRole:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The master execution role for data lambdas
+      Name: /setup/roles/DataLambdasRole
+      Value:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      Type: String

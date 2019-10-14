@@ -111,7 +111,7 @@ Resources:
         Fn::GetAtt:
         - LambdaTestRole
         - Arn
-      CodeUri: s3://dsp-sam-conv/9463fbb8bf41422a4b3ba11ed45dec1a
+      CodeUri: s3://dsp-sam-conv/647d0f1e11f77d1106184dc10ace441e
       Handler: main.handler
       Runtime: python3.7
       Events:
@@ -127,7 +127,7 @@ Resources:
         Fn::GetAtt:
         - LambdaTestRole
         - Arn
-      CodeUri: s3://dsp-sam-conv/d95b76ea01fb2d24023c2e5afa0aa7d5
+      CodeUri: s3://dsp-sam-conv/8f698234ca18acc4b88f5cf0e65a111a
       Handler: main.handler
       Runtime: python3.7
       Events:
@@ -135,6 +135,22 @@ Resources:
           Type: Api
           Properties:
             Path: /jobs
+            Method: get
+  JobsGetIdFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: s3://dsp-sam-conv/b16441075a7a74adb68b1ba8becdcc66
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        ApiGetJobId:
+          Type: Api
+          Properties:
+            Path: /jobs/{id}
             Method: get
   SageMakerNotebookLinkInternal:
     Type: AWS::Serverless::Function
@@ -158,3 +174,133 @@ Resources:
               detail:
                 state:
                 - STARTING
+  EmrJobMonitorInternal:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: s3://dsp-sam-conv/641fa1e520837a6e3e2ab35ebeecb41f
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        EmrStateEvent:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+              - aws.emr
+              detail-type:
+              - EMR Step Status Change
+              - EMR Cluster State Change
+  SmNotebookMonitorInternal:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      CodeUri: s3://dsp-sam-conv/5659de0f23a9d1742cde1082d3ecc12f
+      Handler: main.handler
+      Runtime: python3.7
+      Events:
+        NbStateChange:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+              - aws.sagemaker
+              detail-type:
+              - SageMaker Notebook Instance State Change
+  SageMakerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Primary execution role for SageMaker notebooks. Consumes managed
+        policies.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - sagemaker.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+      - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      RoleName: SageMaker
+  EMRServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Service role for EMR clusters.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow
+          Principal:
+            Service: elasticmapreduce.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceRole
+      RoleName: EmrService
+  EMRInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Instance role for EMR clusters. Characterizes instance profile.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceforEC2Role
+      RoleName: EmrJobFlow
+  EMRInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+      - Ref: EMRInstanceRole
+  SagemakerMasterRole:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The ARN of the master SageMaker role.
+      Name: /setup/roles/SageMakerRole
+      Value:
+        Fn::GetAtt:
+        - SageMakerRole
+        - Arn
+      Type: String
+  ClusterJobFlowRole:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The id of the JobFlowRole for any EMR cluster.
+      Name: /setup/roles/ClusterJobFlowRole
+      Value:
+        Ref: EMRInstanceProfile
+      Type: String
+  ClusterServiceRole:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The id of the ServiceRole for any EMR cluster.
+      Name: /setup/roles/ClusterServiceRole
+      Value:
+        Ref: EMRServiceRole
+      Type: String
+  DataLambdaRole:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The master execution role for data lambdas
+      Name: /setup/roles/DataLambdasRole
+      Value:
+        Fn::GetAtt:
+        - LambdaTestRole
+        - Arn
+      Type: String
